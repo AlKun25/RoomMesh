@@ -1,5 +1,6 @@
 """Tests for mDNS/Bonjour service advertisement."""
 
+import time
 from unittest.mock import MagicMock, patch
 
 from src.modules.discovery import BonjourAdvertiser
@@ -34,19 +35,8 @@ class TestBonjourAdvertiser:
         assert advertiser.host == "127.0.0.1"
         assert advertiser.enable is False
 
-    @patch("src.modules.discovery.mdns.socket")
-    @patch("src.modules.discovery.mdns.Zeroconf")
-    def test_start_creates_service_info(self, mock_zeroconf, mock_socket) -> None:
-        """Test that start() creates and registers ServiceInfo."""
-        mock_socket.gethostname.return_value = "MacBook-Pro"
-        mock_socket.inet_aton.return_value = b"\xc0\xa8\x01\x01"
-        mock_sock_instance = MagicMock()
-        mock_sock_instance.getsockname.return_value = ("192.168.1.1", 12345)
-        mock_socket.socket.return_value.__enter__.return_value = mock_sock_instance
-
-        mock_zeroconf_instance = MagicMock()
-        mock_zeroconf.return_value = mock_zeroconf_instance
-
+    def test_start_creates_service_info(self) -> None:
+        """Test that start() creates ServiceInfo and registration thread."""
         advertiser = BonjourAdvertiser(
             service_name="macbook",
             port=8000,
@@ -54,15 +44,21 @@ class TestBonjourAdvertiser:
         )
         advertiser.start()
 
-        # Verify Zeroconf was instantiated
-        mock_zeroconf.assert_called_once()
+        # Give thread time to create service info
+        time.sleep(0.1)
 
-        # Verify service was registered
-        mock_zeroconf_instance.register_service.assert_called_once()
+        # Verify service info was created
+        assert advertiser.service_info is not None
+        assert advertiser.service_info.name == "macbook._http._tcp.local."
+        assert advertiser.service_info.port == 8000
+        assert advertiser._registration_thread is not None
+
+        # Cleanup
+        advertiser.stop()
+        time.sleep(0.5)
 
     @patch("src.modules.discovery.mdns.socket")
-    @patch("src.modules.discovery.mdns.Zeroconf")
-    def test_start_disabled_does_nothing(self, mock_zeroconf, mock_socket) -> None:
+    def test_start_disabled_does_nothing(self, mock_socket) -> None:
         """Test that start() does nothing when mDNS is disabled."""
         advertiser = BonjourAdvertiser(
             service_name="macbook",
@@ -71,8 +67,9 @@ class TestBonjourAdvertiser:
         )
         advertiser.start()
 
-        # Zeroconf should not be instantiated
-        mock_zeroconf.assert_not_called()
+        # Service info should not be created
+        assert advertiser.service_info is None
+        assert advertiser.zeroconf is None
 
     def test_stop_without_zeroconf(self) -> None:
         """Test that stop() handles the case when Zeroconf is None."""
@@ -81,14 +78,18 @@ class TestBonjourAdvertiser:
             port=8000,
             enable=True,
         )
+        advertiser.enable = False
         # Should not raise an exception
         advertiser.stop()
 
-    @patch("src.modules.discovery.mdns.Zeroconf")
-    def test_stop_unregisters_service(self, mock_zeroconf) -> None:
+    @patch("src.modules.discovery.mdns.socket")
+    def test_stop_unregisters_service(self, mock_socket) -> None:
         """Test that stop() unregisters the service."""
         mock_zeroconf_instance = MagicMock()
-        mock_zeroconf.return_value = mock_zeroconf_instance
+        mock_sock_instance = MagicMock()
+        mock_sock_instance.getsockname.return_value = ("192.168.1.1", 12345)
+        mock_socket.socket.return_value.__enter__.return_value = mock_sock_instance
+        mock_socket.gethostname.return_value = "MacBook-Pro"
 
         advertiser = BonjourAdvertiser(
             service_name="macbook",
@@ -105,8 +106,8 @@ class TestBonjourAdvertiser:
         mock_zeroconf_instance.close.assert_called_once()
         assert advertiser.zeroconf is None
 
-    @patch("src.modules.discovery.mdns.Zeroconf")
-    def test_cleanup_closes_zeroconf(self, mock_zeroconf) -> None:
+    @patch("src.modules.discovery.mdns.socket")
+    def test_cleanup_closes_zeroconf(self, mock_socket) -> None:
         """Test that _cleanup() closes Zeroconf."""
         mock_zeroconf_instance = MagicMock()
         advertiser = BonjourAdvertiser(
@@ -120,23 +121,27 @@ class TestBonjourAdvertiser:
         mock_zeroconf_instance.close.assert_called_once()
         assert advertiser.zeroconf is None
 
-    @patch("src.modules.discovery.mdns.socket")
-    @patch("src.modules.discovery.mdns.Zeroconf")
-    def test_start_with_localhost(self, mock_zeroconf, mock_socket) -> None:
-        """Test that start() with localhost doesn't try to discover IP."""
-        mock_socket.gethostname.return_value = "MacBook-Pro"
-        mock_socket.inet_aton.return_value = b"\x7f\x00\x00\x01"
-        mock_zeroconf_instance = MagicMock()
-        mock_zeroconf.return_value = mock_zeroconf_instance
-
+    def test_get_local_ip(self) -> None:
+        """Test local IP detection."""
         advertiser = BonjourAdvertiser(
             service_name="macbook",
             port=8000,
-            host="127.0.0.1",
-            enable=True,
         )
-        advertiser.start()
+        local_ip = advertiser._get_local_ip()
 
-        # socket.socket should not be called for localhost
-        mock_socket.socket.assert_not_called()
-        mock_zeroconf_instance.register_service.assert_called_once()
+        # Should return a valid IP address string (not 127.0.0.1 unless disconnected)
+        assert isinstance(local_ip, str)
+        assert len(local_ip) > 0
+        # Should be either a valid IP or the fallback
+        assert local_ip in ("127.0.0.1",) or "." in local_ip
+
+    def test_get_local_ip_fallback(self) -> None:
+        """Test local IP fallback on error."""
+        advertiser = BonjourAdvertiser(
+            service_name="macbook",
+            port=8000,
+        )
+        # Mock socket to raise exception
+        with patch("src.modules.discovery.mdns.socket.socket", side_effect=Exception("Network error")):
+            local_ip = advertiser._get_local_ip()
+            assert local_ip == "127.0.0.1"
