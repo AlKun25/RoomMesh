@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
+    mdns_enabled: bool = True
+    mdns_service_name: str = "macbook"
 
 
 settings = Settings()
