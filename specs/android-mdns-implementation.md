@@ -1,6 +1,7 @@
 # Android mDNS Discovery Implementation Guide
 
 ## Overview
+
 This guide provides implementation steps for the Android client side of issue #2 (Configure mDNS so the MacBook is reachable at macbook.local).
 
 ## Components to Implement
@@ -187,7 +188,7 @@ import kotlinx.coroutines.launch
 
 class MdnsModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
-    
+
     private val mdnsService = MdnsDiscoveryService(reactContext)
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -225,7 +226,7 @@ class MdnsModule(reactContext: ReactApplicationContext) :
 Create `src/services/MdnsDiscovery.ts`:
 
 ```typescript
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform } from "react-native";
 
 interface DiscoveryResult {
   serviceName: string;
@@ -240,30 +241,27 @@ interface ServerConfig {
 }
 
 class MdnsDiscoveryService {
-  private nativeModule = Platform.OS === 'android' 
-    ? NativeModules.MdnsModule 
-    : null;
+  private nativeModule =
+    Platform.OS === "android" ? NativeModules.MdnsModule : null;
 
   async discoverService(
-    serviceName: string = 'macbook',
+    serviceName: string = "macbook",
     timeout: number = 5000,
   ): Promise<DiscoveryResult | null> {
     if (!this.nativeModule) {
-      console.warn('mDNS discovery not available on this platform');
+      console.warn("mDNS discovery not available on this platform");
       return null;
     }
 
     try {
       return await this.nativeModule.discoverService(serviceName, timeout);
     } catch (error) {
-      console.error('mDNS discovery failed:', error);
+      console.error("mDNS discovery failed:", error);
       return null;
     }
   }
 
-  async getServerConfig(
-    preferences: ServerPreferences,
-  ): Promise<ServerConfig> {
+  async getServerConfig(preferences: ServerPreferences): Promise<ServerConfig> {
     const useMdns = await preferences.getMdnsEnabled();
 
     if (useMdns) {
@@ -282,7 +280,7 @@ class MdnsDiscoveryService {
     const port = await preferences.getServerPort();
 
     if (!host) {
-      throw new Error('No server configured and mDNS discovery failed');
+      throw new Error("No server configured and mDNS discovery failed");
     }
 
     return {
