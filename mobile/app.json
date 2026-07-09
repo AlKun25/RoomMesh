@@ -28,6 +28,11 @@
       "package": "com.alkun25.roommesh"
     },
     "web": {},
+    "plugins": [
+      "@config-plugins/react-native-webrtc",
+      "expo-dev-client",
+      "expo-router"
+    ],
     "extra": {
       "eas": {
         "projectId": "roommesh-local"
