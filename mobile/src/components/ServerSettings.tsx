@@ -13,7 +13,7 @@ import {
 import MdnsDiscovery from '../services/MdnsDiscovery';
 import { serverPreferences } from '../services/ServerPreferences';
 
-export const ServerSettingsScreen: React.FC = () => {
+export const ServerSettings: React.FC = () => {
   const [mdnsEnabled, setMdnsEnabled] = useState(true);
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState('8000');
@@ -72,7 +72,11 @@ export const ServerSettingsScreen: React.FC = () => {
     setConnectionStatus('testing');
     try {
       const url = `http://${serverHost}:${serverPort}/health`;
-      const response = await fetch(url, { timeout: 5000 });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         setConnectionStatus('success');
