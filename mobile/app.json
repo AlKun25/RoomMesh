@@ -2,10 +2,15 @@
   "expo": {
     "name": "RoomMesh",
     "slug": "roommesh",
+    "scheme": "roommesh",
     "version": "0.1.0",
     "description": "Scan a room with your phone and instantly walk through it in 3D",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    },
     "splash": {
       "backgroundColor": "#ffffff"
     },

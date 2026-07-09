@@ -46,21 +46,27 @@ The app uses:
 
 - **Expo SDK 51** (RN 0.74.5) with **prebuild / CNG** — native `android/` is
   generated, not committed
-- **React Navigation** (native-stack) — screen navigation
+- **Expo Router** — file-based navigation from the `app/` directory (typed routes
+  enabled); built on React Navigation's native-stack under the hood
 - **Async Storage** — local data persistence
 - **react-native-safe-area-context** — safe-area layout for navigation
 - **Local mDNS Expo module** (`modules/mdns`, Android `NsdManager`) — discovers
   the MacBook server on the local network
 
-## TypeScript
+## Project layout
 
-The project uses TypeScript for type safety. Source files are in `./src/`:
+The app entry is `expo-router/entry` (set via `main` in `package.json`); routes
+are derived from the `app/` directory. Route files are thin layers that re-export
+screen implementations kept in `src/`, keeping routing separate from feature logic.
 
-- `src/App.tsx` — main app component
-- `src/screens/` — screen components
-- `src/services/` — business logic
+- `app/_layout.tsx` — root navigator (`Stack`)
+- `app/index.tsx` — index route; re-exports `ServerSettingsScreen`
+- `src/screens/` — screen implementations
+- `src/services/` — business logic (mDNS discovery, preferences)
+- `modules/` — local native Expo modules (e.g. `modules/mdns`)
 
-Local native modules live in `./modules/` (e.g. `modules/mdns`).
+To add a screen, create a new file under `app/` (e.g. `app/capture.tsx` →
+`/capture`, `app/viewer/[scene].tsx` → `/viewer/:scene`).
 
 ## Troubleshooting
 
@@ -91,5 +97,5 @@ bun install
 ## Resources
 
 - [Expo Documentation](https://docs.expo.dev/)
-- [React Navigation](https://reactnavigation.org/)
+- [Expo Router](https://docs.expo.dev/router/introduction/)
 - [React Native](https://reactnative.dev/)
