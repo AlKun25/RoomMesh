@@ -6,8 +6,8 @@ React Native mobile app for room scanning and 3D reconstruction using Expo.
 
 - Node.js 18+ (or equivalent)
 - Bun (https://bun.sh)
+- Android SDK / platform-tools (for `expo run:android`)
 - Physical Android device (API 23+) or Android emulator
-- Expo Go app installed on device (optional, for QR code deployment)
 
 ## Setup
 
@@ -18,69 +18,75 @@ bun install
 
 ## Development
 
-### Start Dev Server
+> **Important:** this app ships a **local native module** (`Mdns`, used for mDNS
+> server discovery), so it must run as an **Expo dev build** — not Expo Go. Expo
+> Go cannot load local native modules, so mDNS (and future ARCore/camera native
+> code) will not work under it. Use Expo Go only for UI-only iteration.
+
+### Run a dev build on a device (required for the full app)
+
 ```bash
-# Start Metro bundler and show QR code
+# Generate the native android/ project from app.json (one-time / after native changes)
+bun run prebuild
+
+# Build, install, and launch on a connected Pixel 7 (or emulator)
+bun run android
+```
+
+### Metro dev server (JS reloads)
+
+```bash
+# Start the Metro bundler; a running dev build connects to it automatically
 bun start
-
-# Or with specific platform
-bun run dev:android
-bun run dev:ios
-```
-
-### Scan QR Code (Easiest)
-1. Run `bun start`
-2. Open Expo Go app on your device
-3. Scan the QR code from terminal
-
-### Or Run on Emulator
-1. Start Android emulator
-2. Run `bun run dev:android`
-
-## Building
-
-### For Local Development
-```bash
-bun run dev
-```
-
-### For Production (EAS Build)
-```bash
-bun run build
 ```
 
 ## Architecture
 
 The app uses:
-- **React Navigation** — screen navigation
+
+- **Expo SDK 51** (RN 0.74.5) with **prebuild / CNG** — native `android/` is
+  generated, not committed
+- **React Navigation** (native-stack) — screen navigation
 - **Async Storage** — local data persistence
-- **React Native Gesture Handler** — touch interactions
-- **React Native Reanimated** — performant animations
-- **Camera Roll** — device media access
+- **react-native-safe-area-context** — safe-area layout for navigation
+- **Local mDNS Expo module** (`modules/mdns`, Android `NsdManager`) — discovers
+  the MacBook server on the local network
 
 ## TypeScript
 
-The project uses TypeScript for type safety. Source files are in `../src/`:
+The project uses TypeScript for type safety. Source files are in `./src/`:
+
 - `src/App.tsx` — main app component
 - `src/screens/` — screen components
 - `src/services/` — business logic
 
+Local native modules live in `./modules/` (e.g. `modules/mdns`).
+
 ## Troubleshooting
 
 ### Metro Bundler Stuck
+
 ```bash
 bun start --reset-cache
 ```
 
 ### Clear All Cache
+
 ```bash
 rm -rf node_modules .expo
 bun install
 ```
 
 ### Device Not Showing
-- Ensure physical device and dev machine are on same WiFi
-- Run `bun start` again and rescan QR code
+
+- Ensure the device is connected via USB with debugging enabled (`adb devices`)
+- Ensure physical device and dev machine are on the same WiFi
+- Re-run `bun run android` to reinstall the dev build
+
+### Rebuild After Native Changes
+
+- After editing `app.json` or anything under `modules/`, re-run
+  `bun run prebuild` then `bun run android`
 
 ## Resources
 
