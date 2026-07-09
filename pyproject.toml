@@ -13,6 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.24.0",
     "pydantic-settings>=2.0.0",
     "zeroconf>=0.130.0",
+    "aiortc>=1.10.0",
 ]
 
 [dependency-groups]
@@ -48,3 +49,6 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
