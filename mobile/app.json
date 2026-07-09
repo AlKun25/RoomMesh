@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "RoomMesh",
+    "slug": "roommesh",
+    "version": "0.1.0",
+    "description": "Scan a room with your phone and instantly walk through it in 3D",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "newArchEnabled": false,
+    "ios": {
+      "supportsTabletMode": false,
+      "buildNumber": "1",
+      "bundleIdentifier": "com.alkun25.roommesh"
+    },
+    "android": {
+      "minSdkVersion": 23,
+      "targetSdkVersion": 36,
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "CHANGE_NETWORK_STATE",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE"
+      ],
+      "package": "com.alkun25.roommesh"
+    },
+    "web": {},
+    "extra": {
+      "eas": {
+        "projectId": "roommesh-local"
+      }
+    }
+  }
+}
