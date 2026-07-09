@@ -32,6 +32,7 @@ yarn install
 ```
 
 Key dependencies:
+
 - `@react-native-async-storage/async-storage` — Persistent settings storage
 - `react-native` — Core framework
 - `@react-navigation/*` — Navigation
@@ -167,7 +168,7 @@ export default function App() {
 When initializing WebRTC or API calls, use the stored server configuration:
 
 ```typescript
-import { serverPreferences } from './src/services/ServerPreferences';
+import { serverPreferences } from "./src/services/ServerPreferences";
 
 const initializeWebRTC = async () => {
   const host = await serverPreferences.getServerHost();
@@ -235,6 +236,7 @@ await serverPreferences.clearAll(): Promise<void>
 ### Manual Testing Steps
 
 1. **Build and deploy**:
+
    ```bash
    npm run build:android
    # or
@@ -265,6 +267,7 @@ await serverPreferences.clearAll(): Promise<void>
 ### Android Emulator Testing
 
 If testing on emulator:
+
 - Emulator has limited mDNS support
 - Manual IP entry is recommended
 - Use your host machine's IP: `10.0.2.2` (special alias in Android emulator)
@@ -276,6 +279,7 @@ If testing on emulator:
 **Issue**: "Discover Server" returns no results
 
 **Solutions**:
+
 1. Verify both devices are on same WiFi network
 2. Verify MacBook server is running: `uv run python -m src.main`
 3. Verify mDNS is advertised: `dns-sd -B _http._tcp` (macOS)
@@ -287,6 +291,7 @@ If testing on emulator:
 **Issue**: "Test Connection" shows error
 
 **Solutions**:
+
 1. Verify host/port is correct
 2. Verify MacBook server is still running
 3. Check network connectivity between devices
@@ -298,6 +303,7 @@ If testing on emulator:
 **Issue**: App crashes when trying to initialize mDNS
 
 **Solutions**:
+
 1. Ensure MdnsPackage is registered in MainApplication
 2. Verify AsyncStorage is properly installed
 3. Check Logcat for error messages: `adb logcat | grep MdnsModule`
@@ -308,13 +314,15 @@ If testing on emulator:
 **Issue**: Settings are cleared after app restart
 
 **Solutions**:
+
 1. Verify AsyncStorage is installed: `npm list @react-native-async-storage/async-storage`
 2. Check that directory permissions are correct
 3. Test AsyncStorage directly:
+
    ```typescript
-   import AsyncStorage from '@react-native-async-storage/async-storage';
-   await AsyncStorage.setItem('test', 'value');
-   const value = await AsyncStorage.getItem('test');
+   import AsyncStorage from "@react-native-async-storage/async-storage";
+   await AsyncStorage.setItem("test", "value");
+   const value = await AsyncStorage.getItem("test");
    console.log(value); // Should be 'value'
    ```
 
