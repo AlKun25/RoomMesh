@@ -47,18 +47,18 @@ The MacBook is a self-contained local processing node — no cloud infrastructur
 
 ## Key Technical Decisions
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| Reconstruction primitive | 3D Gaussian Splatting | Fast, high quality, no dataset needed |
-| Reconstruction backend | `gsplat` | MPS support for M2; cleaner than Nerfstudio for production use |
-| Mesh extraction | `SuGaR` (on demand) | Produces editable mesh from 3DGS without pretraining |
-| SfM approach | Online SfM via `pycolmap` | Real-time pose estimation during capture |
-| Compute location | MacBook (local server) | Avoids cloud GPU costs; good fit for M2 hardware |
-| Data transport | WebRTC via `aiortc` | Reliable, low latency on local network |
-| Mobile framework | React Native (TypeScript) | JS ecosystem, viable ARCore integration via native module |
-| Server language | Python | Shared ecosystem with `gsplat`, `pycolmap`, `SuGaR`, `torch` |
-| Scene viewing | WebGL viewer served from MacBook | No native Android 3D rendering required |
-| Scene persistence | Local filesystem on MacBook | Simple; no database overhead at this stage |
+| Decision                 | Choice                           | Rationale                                                      |
+| ------------------------ | -------------------------------- | -------------------------------------------------------------- |
+| Reconstruction primitive | 3D Gaussian Splatting            | Fast, high quality, no dataset needed                          |
+| Reconstruction backend   | `gsplat`                         | MPS support for M2; cleaner than Nerfstudio for production use |
+| Mesh extraction          | `SuGaR` (on demand)              | Produces editable mesh from 3DGS without pretraining           |
+| SfM approach             | Online SfM via `pycolmap`        | Real-time pose estimation during capture                       |
+| Compute location         | MacBook (local server)           | Avoids cloud GPU costs; good fit for M2 hardware               |
+| Data transport           | WebRTC via `aiortc`              | Reliable, low latency on local network                         |
+| Mobile framework         | React Native (TypeScript)        | JS ecosystem, viable ARCore integration via native module      |
+| Server language          | Python                           | Shared ecosystem with `gsplat`, `pycolmap`, `SuGaR`, `torch`   |
+| Scene viewing            | WebGL viewer served from MacBook | No native Android 3D rendering required                        |
+| Scene persistence        | Local filesystem on MacBook      | Simple; no database overhead at this stage                     |
 
 ## Open Problems
 
