@@ -1,10 +1,8 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import * as Mdns from '../../modules/mdns';
+import type { DiscoveryResult } from '../../modules/mdns';
 
-export interface DiscoveryResult {
-  serviceName: string;
-  host: string;
-  port: number;
-}
+export type { DiscoveryResult };
 
 export interface ServerConfig {
   host: string;
@@ -13,20 +11,17 @@ export interface ServerConfig {
 }
 
 class MdnsDiscoveryService {
-  private nativeModule =
-    Platform.OS === 'android' ? NativeModules.MdnsModule : null;
-
   async discoverService(
     serviceName: string = 'macbook',
     timeout: number = 5000,
   ): Promise<DiscoveryResult | null> {
-    if (!this.nativeModule) {
-      console.warn('mDNS discovery not available on this platform');
+    if (Platform.OS !== 'android') {
+      console.warn('mDNS discovery is only available on Android');
       return null;
     }
 
     try {
-      return await this.nativeModule.discoverService(serviceName, timeout);
+      return await Mdns.discoverService(serviceName, timeout);
     } catch (error) {
       console.error('mDNS discovery failed:', error);
       return null;
@@ -60,12 +55,6 @@ class MdnsDiscoveryService {
       port,
       useMdns: false,
     };
-  }
-
-  cleanup() {
-    if (this.nativeModule?.cleanup) {
-      this.nativeModule.cleanup();
-    }
   }
 }
 
