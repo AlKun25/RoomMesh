@@ -10,6 +10,7 @@ from src.config import settings
 from src.modules.discovery import BonjourAdvertiser
 from src.modules.health import routes as health_routes
 from src.modules.signaling import PeerConnectionManager
+from src.modules.signaling import routes as signaling_routes
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
     )
     bonjour.start()
     peer_connections = PeerConnectionManager()
+    # Expose the manager to request handlers (e.g. the /signal WebSocket route).
+    app.state.peer_connections = peer_connections
     yield
     # Shutdown
     if bonjour:
@@ -45,6 +48,7 @@ app = FastAPI(
 )
 
 app.include_router(health_routes.router)
+app.include_router(signaling_routes.router)
 
 
 if __name__ == "__main__":

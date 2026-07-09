@@ -48,9 +48,7 @@ class PeerConnectionManager:
 
         return pc
 
-    def create_data_channel(
-        self, pc: RTCPeerConnection, label: str = "roommesh"
-    ) -> RTCDataChannel:
+    def create_data_channel(self, pc: RTCPeerConnection, label: str = "roommesh") -> RTCDataChannel:
         """Create a data channel on ``pc``.
 
         Data channels are codec-agnostic (SCTP), so this path involves no media

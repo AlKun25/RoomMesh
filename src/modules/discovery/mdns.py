@@ -3,10 +3,10 @@
 import logging
 import socket
 import threading
-import traceback
 import time
+import traceback
 
-from zeroconf import IPVersion, ServiceInfo, Zeroconf
+from zeroconf import ServiceInfo, Zeroconf
 
 logger = logging.getLogger(__name__)
 
@@ -84,9 +84,7 @@ class BonjourAdvertiser:
             self.zeroconf = Zeroconf()
             if self.service_info:
                 # Allow name change if service name is not unique on the network
-                self.zeroconf.register_service(
-                    self.service_info, allow_name_change=True
-                )
+                self.zeroconf.register_service(self.service_info, allow_name_change=True)
                 logger.info(
                     f"Registered mDNS service: {self.service_name}.local on "
                     f"{self.port} successfully"

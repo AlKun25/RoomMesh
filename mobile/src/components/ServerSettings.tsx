@@ -12,6 +12,9 @@ import {
 } from 'react-native';
 import MdnsDiscovery from '../services/MdnsDiscovery';
 import { serverPreferences } from '../services/ServerPreferences';
+import WebRTCService, {
+  type ConnectionState,
+} from '../services/WebRTCService';
 
 export const ServerSettings: React.FC = () => {
   const [mdnsEnabled, setMdnsEnabled] = useState(true);
@@ -22,9 +25,14 @@ export const ServerSettings: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
+  const [webrtcStatus, setWebrtcStatus] = useState<ConnectionState>('idle');
 
   useEffect(() => {
     loadSettings();
+    // Tear down any active WebRTC session when the screen unmounts.
+    return () => {
+      WebRTCService.disconnect();
+    };
   }, []);
 
   const loadSettings = async () => {
@@ -96,6 +104,34 @@ export const ServerSettings: React.FC = () => {
     }
   };
 
+  const handleConnect = async () => {
+    if (!serverHost) {
+      Alert.alert('Error', 'Please enter a server host');
+      return;
+    }
+
+    setWebrtcStatus('connecting');
+    try {
+      await WebRTCService.connect(
+        serverHost,
+        parseInt(serverPort, 10),
+        setWebrtcStatus,
+      );
+    } catch (error) {
+      setWebrtcStatus('failed');
+      Alert.alert(
+        'Connection Failed',
+        'Could not establish a WebRTC connection to the server.',
+      );
+      console.error('WebRTC connect error:', error);
+    }
+  };
+
+  const handleDisconnect = () => {
+    WebRTCService.disconnect();
+    setWebrtcStatus('idle');
+  };
+
   const handleSave = async () => {
     try {
       await serverPreferences.setMdnsEnabled(mdnsEnabled);
@@ -118,6 +154,34 @@ export const ServerSettings: React.FC = () => {
         return '#007AFF';
       default:
         return '#888888';
+    }
+  };
+
+  const getWebrtcStatusColor = () => {
+    switch (webrtcStatus) {
+      case 'connected':
+        return '#34C759';
+      case 'failed':
+        return '#FF3B30';
+      case 'connecting':
+        return '#007AFF';
+      default:
+        return '#888888';
+    }
+  };
+
+  const webrtcStatusText = () => {
+    switch (webrtcStatus) {
+      case 'connecting':
+        return 'Connecting...';
+      case 'connected':
+        return 'Connected';
+      case 'failed':
+        return 'Failed';
+      case 'closed':
+        return 'Closed';
+      default:
+        return 'Not connected';
     }
   };
 
@@ -221,6 +285,38 @@ export const ServerSettings: React.FC = () => {
                     ? 'Connected'
                     : 'Failed'}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[
+              styles.halfButton,
+              styles.connectButton,
+              discovering && styles.buttonDisabled,
+            ]}
+            onPress={
+              webrtcStatus === 'connected' ? handleDisconnect : handleConnect
+            }
+            disabled={discovering || webrtcStatus === 'connecting'}
+          >
+            {webrtcStatus === 'connecting' ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {webrtcStatus === 'connected' ? 'Disconnect' : 'Connect (WebRTC)'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.statusIndicator}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: getWebrtcStatusColor() },
+              ]}
+            />
+            <Text style={styles.statusText}>{webrtcStatusText()}</Text>
           </View>
         </View>
 
@@ -354,6 +450,9 @@ const styles = StyleSheet.create({
   },
   testButton: {
     backgroundColor: '#FF9500',
+  },
+  connectButton: {
+    backgroundColor: '#007AFF',
   },
   statusIndicator: {
     flexDirection: 'row',

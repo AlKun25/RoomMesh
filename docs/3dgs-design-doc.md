@@ -16,7 +16,7 @@ The system allows a user to capture video on their Android phone, stream it to a
 
 ## 2. High-Level Architecture
 
-```
+```text
 Pixel 7 (React Native)
     │
     │  WebRTC (local network)
@@ -49,25 +49,25 @@ Responsible for capturing and preprocessing data before sending it to the MacBoo
 
 **Pre-computation on device (Pixel 7):**
 
-| Task | Purpose |
-|---|---|
-| Frame decimation | Drop redundant frames before sending; avoids streaming unnecessary data |
-| Blur detection (Laplacian variance) | Filter motion-blurred frames that would degrade SfM |
-| Exposure check | Reject over or underexposed frames |
-| IMU collection | Accelerometer and gyroscope timestamps alongside frames; warms up pose estimation |
-| ARCore pose estimation | Per-frame camera pose priors; dramatically reduces MacBook SfM workload |
-| JPEG / WebP compression | Reduce frame size before WebRTC transmission |
+| Task                                | Purpose                                                                           |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| Frame decimation                    | Drop redundant frames before sending; avoids streaming unnecessary data           |
+| Blur detection (Laplacian variance) | Filter motion-blurred frames that would degrade SfM                               |
+| Exposure check                      | Reject over or underexposed frames                                                |
+| IMU collection                      | Accelerometer and gyroscope timestamps alongside frames; warms up pose estimation |
+| ARCore pose estimation              | Per-frame camera pose priors; dramatically reduces MacBook SfM workload           |
+| JPEG / WebP compression             | Reduce frame size before WebRTC transmission                                      |
 
 ARCore poses are the most valuable pre-computation. They are noisy and drift over time but serve as a strong warm start for the online SfM running on the MacBook.
 
 **Key libraries:**
 
-| Library | Role |
-|---|---|
-| `react-native-webrtc` | WebRTC data pipe to MacBook |
+| Library                      | Role                                              |
+| ---------------------------- | ------------------------------------------------- |
+| `react-native-webrtc`        | WebRTC data pipe to MacBook                       |
 | `react-native-vision-camera` | Camera control (exposure, focus lock, frame rate) |
-| ARCore native module | Per-frame pose data |
-| `react-native-sensors` | IMU data |
+| ARCore native module         | Per-frame pose data                               |
+| `react-native-sensors`       | IMU data                                          |
 
 ### 3.2 MacBook Server (Python)
 
@@ -85,22 +85,22 @@ The MacBook is the single server. It handles signaling, reconstruction, mesh exp
 
 **Key libraries:**
 
-| Library | Role |
-|---|---|
-| `fastapi` + `uvicorn` | Web server and REST API |
-| `aiortc` | WebRTC implementation |
-| `gsplat` | 3D Gaussian Splatting optimization |
-| `pycolmap` | Online Structure from Motion |
-| `SuGaR` | Surface mesh extraction and texture baking from 3DGS |
-| `torch` (MPS backend) | GPU compute on M2 via Metal Performance Shaders |
-| `open3d` | Point cloud handling |
-| `numpy` | Compute foundation |
+| Library               | Role                                                 |
+| --------------------- | ---------------------------------------------------- |
+| `fastapi` + `uvicorn` | Web server and REST API                              |
+| `aiortc`              | WebRTC implementation                                |
+| `gsplat`              | 3D Gaussian Splatting optimization                   |
+| `pycolmap`            | Online Structure from Motion                         |
+| `SuGaR`               | Surface mesh extraction and texture baking from 3DGS |
+| `torch` (MPS backend) | GPU compute on M2 via Metal Performance Shaders      |
+| `open3d`              | Point cloud handling                                 |
+| `numpy`               | Compute foundation                                   |
 
 ### 3.3 Scene Persistence (Local Filesystem)
 
 Scenes are stored as a structured directory tree on the MacBook.
 
-```
+```text
 /scans
   /scene_001
     /frames
@@ -127,7 +127,7 @@ Candidate viewers: antimatter15's WebGL splat viewer or Niantic's open-source Sc
 
 ### 4.1 Capture Phase
 
-```
+```text
 Pixel 7
   └── react-native-vision-camera captures frames
   └── ARCore produces per-frame pose estimate
@@ -138,7 +138,7 @@ Pixel 7
 
 ### 4.2 Reconstruction Phase
 
-```
+```text
 MacBook
   └── aiortc receives frame stream
   └── pycolmap runs online SfM
@@ -153,7 +153,7 @@ MacBook
 
 This phase is optional and triggered explicitly by the user when they want an editable 3D model, for example for interior design work.
 
-```
+```text
 MacBook
   └── SuGaR takes scene.ply + original posed frames as input
   └── Runs surface-regularized Gaussian optimization
@@ -169,7 +169,7 @@ The tradeoff is time. SuGaR takes meaningfully longer than vanilla gsplat becaus
 
 ### 4.4 Persistence and Serving Phase
 
-```
+```text
 MacBook
   └── scene.ply (and optionally mesh files) written to /scans/scene_NNN/
   └── metadata.json updated with completion status
@@ -197,13 +197,13 @@ The MacBook needs a stable local address. Using mDNS (`macbook.local`) is the cl
 
 **3D Gaussian Splatting (3DGS)** is the chosen primitive.
 
-| Property | Detail |
-|---|---|
-| Training time | Minutes per scene (vs. hours for NeRF) |
-| Render speed | 100+ fps on consumer hardware |
-| Indoor quality | Strong; better than NeRF for bounded indoor scenes |
+| Property               | Detail                                                  |
+| ---------------------- | ------------------------------------------------------- |
+| Training time          | Minutes per scene (vs. hours for NeRF)                  |
+| Render speed           | 100+ fps on consumer hardware                           |
+| Indoor quality         | Strong; better than NeRF for bounded indoor scenes      |
 | Training data required | None; per-scene optimization with no pretrained weights |
-| Compute backend | gsplat with PyTorch MPS on M2 |
+| Compute backend        | gsplat with PyTorch MPS on M2                           |
 
 3DGS does not require a dataset of prior scenes. Given posed frames of a specific room, it optimizes a set of 3D Gaussians from scratch to represent that room. The only prerequisite is accurate camera poses, which the online SfM pipeline provides.
 
@@ -239,18 +239,18 @@ This runs continuously on the MacBook during capture, enabling the eventual feed
 
 ## 9. Key Technical Decisions
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| Reconstruction primitive | 3D Gaussian Splatting | Fast, high quality, no dataset needed |
-| Reconstruction backend | gsplat | MPS support for M2; cleaner than Nerfstudio for production use |
-| Mesh extraction | SuGaR (on demand) | Produces editable mesh from 3DGS without pretraining |
-| SfM approach | Online SfM via pycolmap | Real-time pose estimation during capture |
-| Compute location | MacBook (local server) | Avoids cloud GPU costs; good fit for M2 hardware |
-| Data transport | WebRTC via aiortc | Reliable, low latency on local network |
-| Mobile framework | React Native (TypeScript) | JS ecosystem, viable ARCore integration via native module |
-| Server language | Python | Shared ecosystem with gsplat, pycolmap, SuGaR, torch |
-| Scene viewing | WebGL viewer served from MacBook | No native Android 3D rendering required |
-| Scene persistence | Local filesystem on MacBook | Simple; no database overhead at this stage |
+| Decision                 | Choice                           | Rationale                                                      |
+| ------------------------ | -------------------------------- | -------------------------------------------------------------- |
+| Reconstruction primitive | 3D Gaussian Splatting            | Fast, high quality, no dataset needed                          |
+| Reconstruction backend   | gsplat                           | MPS support for M2; cleaner than Nerfstudio for production use |
+| Mesh extraction          | SuGaR (on demand)                | Produces editable mesh from 3DGS without pretraining           |
+| SfM approach             | Online SfM via pycolmap          | Real-time pose estimation during capture                       |
+| Compute location         | MacBook (local server)           | Avoids cloud GPU costs; good fit for M2 hardware               |
+| Data transport           | WebRTC via aiortc                | Reliable, low latency on local network                         |
+| Mobile framework         | React Native (TypeScript)        | JS ecosystem, viable ARCore integration via native module      |
+| Server language          | Python                           | Shared ecosystem with gsplat, pycolmap, SuGaR, torch           |
+| Scene viewing            | WebGL viewer served from MacBook | No native Android 3D rendering required                        |
+| Scene persistence        | Local filesystem on MacBook      | Simple; no database overhead at this stage                     |
 
 ---
 
