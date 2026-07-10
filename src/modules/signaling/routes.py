@@ -31,6 +31,8 @@ from aiortc import RTCIceCandidate, RTCPeerConnection, RTCSessionDescription
 from aiortc.sdp import candidate_from_sdp
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from src.config import settings
+from src.modules.frames import FrameSink
 from src.modules.signaling.connection import PeerConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -83,10 +85,48 @@ async def signal(websocket: WebSocket) -> None:
 
     pc: RTCPeerConnection = manager.create_peer_connection()
 
+    # One capture session per peer connection. The sink is created on the first
+    # video track. Its lifetime is tied to the *peer connection*, not this
+    # signaling socket — see the teardown note below.
+    frame_sink: FrameSink | None = None
+
+    # The client closes the signaling socket as soon as the peer connection is
+    # up (signaling is only needed for the handshake); media then flows over the
+    # established connection. So once we've answered, a socket close must NOT
+    # tear down the pc — otherwise the capture ends the instant it connects.
+    # We only clean up here for an *incomplete* handshake (client dropped mid-
+    # negotiation) or an explicit ``bye``. Completed sessions are cleaned up when
+    # the peer connection reaches a terminal state (below), which also ends the
+    # frame sink via its track reaching end-of-stream.
+    teardown_on_exit = True
+
     @pc.on("datachannel")
     def on_datachannel(channel) -> None:
-        # The phone opens the data channel; byte-integrity testing is issue #6.
+        # The phone opens the data channel; reserved for future control/pose
+        # messages. Frames themselves travel over the video track (issue #6).
         logger.info("Data channel opened by client: %s", channel.label)
+
+    @pc.on("track")
+    def on_track(track) -> None:
+        # The phone streams camera video as a MediaChannel; persist its frames
+        # as images for the SfM / 3DGS pipeline (issue #6).
+        nonlocal frame_sink
+        logger.info("Track received from client: kind=%s", track.kind)
+        if track.kind != "video" or frame_sink is not None:
+            return
+        frame_sink = FrameSink(
+            scans_dir=settings.scans_dir,
+            save_fps=settings.frame_save_fps,
+        )
+        frame_sink.start(track)
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange() -> None:
+        # Finalize the capture session when the peer connection ends (client
+        # disconnects, ICE fails). The manager also discards the pc on these
+        # states; stopping the sink here is idempotent with its track-end path.
+        if pc.connectionState in ("failed", "closed") and frame_sink is not None:
+            await frame_sink.stop()
 
     try:
         while True:
@@ -101,6 +141,9 @@ async def signal(websocket: WebSocket) -> None:
                 await pc.setLocalDescription(answer)
                 # aiortc embeds its gathered ICE candidates in this SDP.
                 await websocket.send_json({"type": "answer", "sdp": pc.localDescription.sdp})
+                # Handshake done: from here the pc is self-sustaining, so a
+                # socket close should leave it (and the capture) running.
+                teardown_on_exit = False
 
             elif msg_type == "ice-candidate":
                 candidate = _parse_ice_candidate(message)
@@ -108,6 +151,8 @@ async def signal(websocket: WebSocket) -> None:
                     await pc.addIceCandidate(candidate)
 
             elif msg_type == "bye":
+                # Explicit client request to close the whole session.
+                teardown_on_exit = True
                 break
 
             else:
@@ -116,7 +161,11 @@ async def signal(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         logger.info("Signaling WebSocket disconnected")
     finally:
-        # Clean up a peer connection whose client dropped mid-handshake; the
-        # manager also auto-discards on terminal connection states.
-        if pc.connectionState != "closed":
-            await pc.close()
+        # Only tear down on an incomplete handshake or an explicit bye. A
+        # completed session keeps streaming over the peer connection after this
+        # socket closes; its cleanup runs from on_connectionstatechange.
+        if teardown_on_exit:
+            if frame_sink is not None:
+                await frame_sink.stop()
+            if pc.connectionState != "closed":
+                await pc.close()
