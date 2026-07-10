@@ -6,10 +6,14 @@ from src.config import Settings
 
 
 def test_settings_defaults():
-    """Test that settings have correct default values."""
-    settings = Settings()
+    """Test that settings have correct default values.
+
+    ``_env_file=None`` ignores the project ``.env`` so this exercises the
+    in-code defaults rather than whatever the local ``.env`` happens to set.
+    """
+    settings = Settings(_env_file=None)
     assert settings.scans_dir == "./scans"
-    assert settings.host == "127.0.0.1"
+    assert settings.host == "0.0.0.0"
     assert settings.port == 8000
     assert settings.debug is False
 
