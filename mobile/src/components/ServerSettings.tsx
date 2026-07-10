@@ -10,13 +10,17 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import MdnsDiscovery from '../services/MdnsDiscovery';
 import { serverPreferences } from '../services/ServerPreferences';
 import WebRTCService, {
+  failureReasonLabel,
   type ConnectionState,
+  type FailureReason,
 } from '../services/WebRTCService';
 
 export const ServerSettings: React.FC = () => {
+  const router = useRouter();
   const [mdnsEnabled, setMdnsEnabled] = useState(true);
   const [serverHost, setServerHost] = useState('');
   const [serverPort, setServerPort] = useState('8000');
@@ -26,6 +30,7 @@ export const ServerSettings: React.FC = () => {
     'idle' | 'testing' | 'success' | 'error'
   >('idle');
   const [webrtcStatus, setWebrtcStatus] = useState<ConnectionState>('idle');
+  const [webrtcFailure, setWebrtcFailure] = useState<FailureReason | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -111,11 +116,19 @@ export const ServerSettings: React.FC = () => {
     }
 
     setWebrtcStatus('connecting');
+    setWebrtcFailure(null);
     try {
+      // Data-only connectivity check here (no camera stream); the video capture
+      // path lives on the Capture screen.
       await WebRTCService.connect(
         serverHost,
         parseInt(serverPort, 10),
-        setWebrtcStatus,
+        (state, reason) => {
+          setWebrtcStatus(state);
+          if (reason) {
+            setWebrtcFailure(reason);
+          }
+        },
       );
     } catch (error) {
       setWebrtcStatus('failed');
@@ -177,7 +190,9 @@ export const ServerSettings: React.FC = () => {
       case 'connected':
         return 'Connected';
       case 'failed':
-        return 'Failed';
+        return webrtcFailure
+          ? `Failed — ${failureReasonLabel(webrtcFailure)}`
+          : 'Failed';
       case 'closed':
         return 'Closed';
       default:
@@ -190,6 +205,13 @@ export const ServerSettings: React.FC = () => {
       <View style={styles.content}>
         <Text style={styles.title}>Server Settings</Text>
         <Text style={styles.subtitle}>Configure MacBook connection</Text>
+
+        <TouchableOpacity
+          style={styles.captureLinkButton}
+          onPress={() => router.push('/capture')}
+        >
+          <Text style={styles.captureLinkText}>Open Camera Capture →</Text>
+        </TouchableOpacity>
 
         <View style={styles.section}>
           <View style={styles.switchRow}>
@@ -409,6 +431,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  captureLinkButton: {
+    backgroundColor: '#1a1a1a',
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    marginBottom: 24,
+  },
+  captureLinkText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   infoBox: {
     backgroundColor: '#E3F2FD',

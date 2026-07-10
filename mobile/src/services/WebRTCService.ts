@@ -1,6 +1,7 @@
 import {
   RTCPeerConnection,
   RTCSessionDescription,
+  type MediaStream,
 } from 'react-native-webrtc';
 
 // react-native-webrtc does not re-export the RTCDataChannel type from its entry
@@ -24,8 +25,43 @@ export type ConnectionState =
   | 'failed'
   | 'closed';
 
-/** Callback invoked whenever the connection state changes. */
-export type ConnectionStateListener = (state: ConnectionState) => void;
+/**
+ * Why a connection attempt failed, so real-network testing (issue #7) can tell
+ * the failure modes apart instead of collapsing them all into `'failed'`:
+ * - `ws-unreachable`  — the `/signal` WebSocket never opened (wrong host, phone
+ *   on a different network/cellular, firewall).
+ * - `ice-failed`      — signaling succeeded but the peers never connected (AP
+ *   isolation, multicast/UDP blocked between devices).
+ * - `signaling-error` — a malformed/unexpected signaling message.
+ * (`mdns-timeout` is reported by the discovery layer, not here.)
+ */
+export type FailureReason =
+  | 'ws-unreachable'
+  | 'ice-failed'
+  | 'signaling-error';
+
+/** Human-readable label for a {@link FailureReason}, for status lines. */
+export function failureReasonLabel(reason: FailureReason): string {
+  switch (reason) {
+    case 'ws-unreachable':
+      return 'server unreachable (ws)';
+    case 'ice-failed':
+      return 'peer connection failed (ice)';
+    case 'signaling-error':
+      return 'signaling error';
+    default:
+      return reason;
+  }
+}
+
+/**
+ * Callback invoked whenever the connection state changes. On `'failed'` a
+ * {@link FailureReason} is provided when known.
+ */
+export type ConnectionStateListener = (
+  state: ConnectionState,
+  reason?: FailureReason,
+) => void;
 
 // Max time to wait for host ICE candidate gathering before sending the offer.
 // On a LAN this completes in tens of milliseconds; the cap only guards against
@@ -35,10 +71,12 @@ const ICE_GATHERING_TIMEOUT_MS = 5000;
 /**
  * Client-side WebRTC service for the RoomMesh connection to the MacBook.
  *
- * It creates an audio-free {@link RTCPeerConnection} with a data channel and
- * performs signaling over a **WebSocket** at `ws://<host>:<port>/signal`
- * (issue #5). No STUN/TURN servers are configured: phone and MacBook are on the
- * same LAN, so host ICE candidates are sufficient.
+ * It creates an {@link RTCPeerConnection} with a data channel and, when a camera
+ * stream is supplied, a **video track** (a MediaChannel the MacBook decodes and
+ * stores as frames — issue #6). The connection is **audio-free**: RoomMesh only
+ * sends video + data. Signaling runs over a **WebSocket** at
+ * `ws://<host>:<port>/signal` (issue #5). No STUN/TURN servers are configured:
+ * phone and MacBook are on the same LAN, so host ICE candidates are sufficient.
  *
  * Signaling is **non-trickle**: the server (aiortc) only begins ICE connectivity
  * checks when the remote candidates are present in the offer SDP, so the client
@@ -50,21 +88,40 @@ class WebRTCService {
   private dataChannel: RTCDataChannel | null = null;
   private ws: WebSocket | null = null;
   private stateListener: ConnectionStateListener | null = null;
+  private failureReason: FailureReason | null = null;
+  // True once the server's SDP answer has been applied. Used to attribute a
+  // socket failure to `ws-unreachable` (before answer) vs an ICE failure after.
+  private answered = false;
 
   /**
-   * Build an audio-free peer connection with a data channel and an SDP offer.
+   * Build a peer connection with a data channel — plus a video track when a
+   * camera `stream` is supplied — and an SDP offer.
    *
    * No STUN/TURN servers are configured: phone and MacBook are on the same LAN,
-   * so host ICE candidates are sufficient.
+   * so host ICE candidates are sufficient. No audio is ever added.
+   *
+   * @param label  Data-channel label.
+   * @param stream Optional camera {@link MediaStream}; its video track is added
+   *               to the connection so frames stream to the MacBook.
    */
-  async createPeerConnection(label: string = 'roommesh'): Promise<PeerConnection> {
+  async createPeerConnection(
+    label: string = 'roommesh',
+    stream?: MediaStream,
+  ): Promise<PeerConnection> {
     // Empty ICE server list — local-network only (no STUN/TURN needed).
     const pc = new RTCPeerConnection({ iceServers: [] });
 
-    // Data (not media) path: SCTP data channels need no codec negotiation.
+    // Data path: SCTP data channel (reserved for future control/pose messages).
     const dataChannel = pc.createDataChannel(label);
 
-    // No audio track is added — RoomMesh only sends data/video to the MacBook.
+    // Video (no audio): add the camera track so the offer carries an m=video
+    // section the MacBook can decode into stored frames.
+    if (stream) {
+      stream
+        .getVideoTracks()
+        .forEach((track) => pc.addTrack(track, stream));
+    }
+
     const offer = await pc.createOffer({});
     await pc.setLocalDescription(offer);
 
@@ -86,18 +143,21 @@ class WebRTCService {
    * @param host   Server host (e.g. `macbook.local` or a LAN IP).
    * @param port   Server port (default 8000).
    * @param onState Optional listener for connection-state changes.
+   * @param stream Optional camera {@link MediaStream} to stream to the MacBook.
    */
   async connect(
     host: string,
     port: number = 8000,
     onState?: ConnectionStateListener,
+    stream?: MediaStream,
   ): Promise<void> {
     // Tear down any previous session before starting a new one.
     this.disconnect();
     this.stateListener = onState ?? null;
+    this.answered = false;
     this.emitState('connecting');
 
-    const { pc, dataChannel } = await this.createPeerConnection();
+    const { pc, dataChannel } = await this.createPeerConnection('roommesh', stream);
     this.pc = pc;
     this.dataChannel = dataChannel;
 
@@ -109,7 +169,9 @@ class WebRTCService {
           this.closeSocket();
           break;
         case 'failed':
-          this.emitState('failed');
+          // Signaling worked (or we'd be ws-unreachable) but the peers never
+          // connected — the classic AP-isolation / UDP-blocked failure mode.
+          this.emitState('failed', 'ice-failed');
           break;
         case 'closed':
           this.emitState('closed');
@@ -136,17 +198,36 @@ class WebRTCService {
           await pc.setRemoteDescription(
             new RTCSessionDescription({ type: 'answer', sdp: message.sdp }),
           );
+          this.answered = true;
         }
       } catch (error) {
         console.error('WebRTC signaling message error:', error);
-        this.emitState('failed');
+        this.emitState('failed', 'signaling-error');
       }
     };
 
     ws.onerror = (event: any) => {
       console.error('WebRTC signaling socket error:', event?.message ?? event);
-      this.emitState('failed');
+      // Before the answer, a socket error means we never reached the server.
+      // After it, the peer link takes over and reports ICE state separately.
+      if (!this.answered) {
+        this.emitState('failed', 'ws-unreachable');
+      }
     };
+
+    ws.onclose = (event: any) => {
+      // A close before the handshake completes (and while not yet connected) is
+      // the server being unreachable, not a normal post-connect socket close.
+      if (!this.answered && this.pc?.connectionState !== 'connected') {
+        console.error('WebRTC signaling socket closed early:', event?.code);
+        this.emitState('failed', 'ws-unreachable');
+      }
+    };
+  }
+
+  /** The reason for the most recent failure, if known (issue #7 diagnostics). */
+  get lastFailureReason(): FailureReason | null {
+    return this.failureReason;
   }
 
   /** Resolve once ICE gathering completes (or a safety timeout elapses). */
@@ -207,6 +288,12 @@ class WebRTCService {
 
   private closeSocket(): void {
     if (this.ws) {
+      // Detach handlers first so our own close() doesn't fire onclose/onerror
+      // and get misread as an unreachable-server failure.
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onerror = null;
+      this.ws.onclose = null;
       try {
         this.ws.close();
       } catch {
@@ -216,8 +303,9 @@ class WebRTCService {
     }
   }
 
-  private emitState(state: ConnectionState): void {
-    this.stateListener?.(state);
+  private emitState(state: ConnectionState, reason?: FailureReason): void {
+    this.failureReason = state === 'failed' ? (reason ?? null) : null;
+    this.stateListener?.(state, reason);
   }
 }
 
