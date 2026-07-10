@@ -219,6 +219,5 @@ __marimo__/
 
 # Other folders
 specs/
-
-# Node
 mobile/node_modules/
+scans/
